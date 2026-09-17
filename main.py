@@ -164,31 +164,33 @@ if result:
         with media_col1:
             st.markdown("#### 🎬 Final Educational Video (.mp4)")
             if result.video_path and os.path.exists(result.video_path):
-                st.video(result.video_path)
                 with open(result.video_path, "rb") as vf:
-                    st.download_button(
-                        "⬇️ Download final_video.mp4",
-                        data=vf.read(),
-                        file_name="final_video.mp4",
-                        mime="video/mp4",
-                        type="primary",
-                        use_container_width=True,
-                    )
+                    video_bytes = vf.read()
+                st.video(video_bytes, format="video/mp4")
+                st.download_button(
+                    "⬇️ Download final_video.mp4",
+                    data=video_bytes,
+                    file_name="final_video.mp4",
+                    mime="video/mp4",
+                    type="primary",
+                    use_container_width=True,
+                )
             else:
                 st.info("Video was not generated or media toggle was off.")
 
         with media_col2:
             st.markdown("#### 🎙️ Spoken AI Voice-Over (.wav)")
             if result.audio_path and os.path.exists(result.audio_path):
-                st.audio(result.audio_path, format="audio/wav")
                 with open(result.audio_path, "rb") as af:
-                    st.download_button(
-                        "⬇️ Download voiceover.wav",
-                        data=af.read(),
-                        file_name="voiceover.wav",
-                        mime="audio/wav",
-                        use_container_width=True,
-                    )
+                    audio_bytes = af.read()
+                st.audio(audio_bytes, format="audio/wav")
+                st.download_button(
+                    "⬇️ Download voiceover.wav",
+                    data=audio_bytes,
+                    file_name="voiceover.wav",
+                    mime="audio/wav",
+                    use_container_width=True,
+                )
             else:
                 st.info("Audio track not found.")
 
