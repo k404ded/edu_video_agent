@@ -12,7 +12,7 @@ from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
-from config import GEMINI_API_KEY, MODEL_NAME, MAX_TOKENS_PER_CALL
+from config import get_api_key, MODEL_NAME, MAX_TOKENS_PER_CALL
 
 _client = None
 _exhausted_models = set()
@@ -67,11 +67,16 @@ def _is_daily_quota_error(err):
 
 def get_client():
     global _client
+    key = get_api_key()
     if _client is None:
-        if GEMINI_API_KEY:
-            _client = genai.Client(api_key=GEMINI_API_KEY)
+        if key:
+            _client = genai.Client(api_key=key)
+            _client._configured_key = key
         else:
             _client = genai.Client()
+    elif key and getattr(_client, "_configured_key", None) != key:
+        _client = genai.Client(api_key=key)
+        _client._configured_key = key
     return _client
 
 

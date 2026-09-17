@@ -9,19 +9,31 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def get_api_key() -> str:
+    """Dynamically resolves GEMINI_API_KEY from environment or Streamlit Cloud secrets."""
+    val = os.getenv("GEMINI_API_KEY", "")
+    if not val:
+        try:
+            import streamlit as st
+            if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
+                val = str(st.secrets["GEMINI_API_KEY"]).strip().strip('"').strip("'")
+        except Exception:
+            pass
+    return val
+
 def _get_secret(key: str, default: str = "") -> str:
     val = os.getenv(key, "")
     if not val:
         try:
             import streamlit as st
             if hasattr(st, "secrets") and key in st.secrets:
-                val = str(st.secrets[key])
+                val = str(st.secrets[key]).strip().strip('"').strip("'")
         except Exception:
             pass
     return val or default
 
 # --- LLM configuration -------------------------------------------------
-GEMINI_API_KEY = _get_secret("GEMINI_API_KEY", "")
+GEMINI_API_KEY = get_api_key()
 MODEL_NAME = _get_secret("MODEL_NAME", "gemini-3.5-flash-lite")
 MAX_TOKENS_PER_CALL = int(os.getenv("MAX_TOKENS_PER_CALL", "4096"))
 CONCURRENT_WORKERS = int(os.getenv("CONCURRENT_WORKERS", "6"))

@@ -16,7 +16,7 @@ os.chdir(_CURRENT_DIR)
 
 import streamlit as st
 
-from config import GEMINI_API_KEY, SUPPORTED_EXTENSIONS, MODEL_NAME
+from config import get_api_key, SUPPORTED_EXTENSIONS, MODEL_NAME
 from agents.orchestrator import run_pipeline
 from output import formatter
 
@@ -69,10 +69,11 @@ st.caption(
     "natural AI voice-over audio (.wav), and a synchronized instructional video (.mp4)."
 )
 
-if not GEMINI_API_KEY:
+active_api_key = get_api_key()
+if not active_api_key:
     st.warning(
-        "No GEMINI_API_KEY found in environment. Set it in a `.env` file "
-        "before generating (see README.md)."
+        "No GEMINI_API_KEY found in environment or secrets. "
+        "Set it in a `.env` file locally, or in Streamlit Cloud Secrets (see Settings)."
     )
 
 # --------------------------------------------------------------------
@@ -106,8 +107,8 @@ with st.container(border=True):
 if generate_clicked:
     if not uploaded_file and not pasted_text.strip():
         st.error("Please upload a file or paste some text first.")
-    elif not GEMINI_API_KEY:
-        st.error("GEMINI_API_KEY is not set. Add it to your .env file and restart the app.")
+    elif not get_api_key():
+        st.error("GEMINI_API_KEY is not set. Add it to your .env file or Streamlit Cloud Secrets.")
     else:
         status_box = st.status("Starting educational pipeline...", expanded=True)
 
