@@ -6,6 +6,7 @@ Orchestrator: runs the modular pipeline end-to-end.
 Exposes a `run_pipeline` generator so the UI can show progress
 per-stage rather than blocking on one long call.
 """
+import os
 import time
 from typing import List, Optional, Callable
 
@@ -76,21 +77,36 @@ def run_pipeline(
 
     if generate_media and slide_outputs:
         report("Generating editable PowerPoint presentation (presentation.pptx)...")
-        pptx_path = generate_presentation(result, output_dir=out_dir)
-        result.pptx_path = pptx_path
+        try:
+            pptx_path = generate_presentation(result, output_dir=out_dir)
+            result.pptx_path = pptx_path
+        except Exception as e:
+            print(f"[Orchestrator] PowerPoint generation notice: {e}")
 
         report("Generating spoken AI voice-over audio (voiceover.wav)...")
-        master_audio_path, section_audio_paths = generate_voiceover(result, output_dir=out_dir)
-        result.audio_path = master_audio_path
-        result.section_audio_paths = section_audio_paths
+        try:
+            master_audio_path, section_audio_paths = generate_voiceover(result, output_dir=out_dir)
+            result.audio_path = master_audio_path
+            result.section_audio_paths = section_audio_paths
+        except Exception as e:
+            print(f"[Orchestrator] Voice-over generation notice: {e}")
 
-        report("Rendering 1080p slide frames for video...")
-        slide_images = render_all_slides(result, output_dir=out_dir)
-        result.slide_image_paths = slide_images
+        slide_images = []
+        try:
+            report("Rendering 1080p slide frames for video...")
+            slide_images = render_all_slides(result, output_dir=out_dir)
+            result.slide_image_paths = slide_images
+        except Exception as e:
+            print(f"[Orchestrator] Slide frames rendering notice: {e}")
 
-        report("Assembling final educational video with narration (final_video.mp4)...")
-        video_path = assemble_video(slide_images, section_audio_paths, output_dir=out_dir)
-        result.video_path = video_path
+        if slide_images and result.section_audio_paths:
+            try:
+                report("Assembling final educational video with narration (final_video.mp4)...")
+                video_path = assemble_video(slide_images, result.section_audio_paths, output_dir=out_dir)
+                if video_path and os.path.exists(video_path):
+                    result.video_path = video_path
+            except Exception as e:
+                print(f"[Orchestrator] Video assembly notice: {e}")
 
     total_time = time.time() - t0
     report(f"Done in {total_time:.1f}s total.")

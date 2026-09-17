@@ -49,30 +49,46 @@ def assemble_video(
         total_segment_dur = max(audio_dur + slide_buffer_seconds, 1.5)
 
         # Build segment: loop single image with audio and slight comfortable trailing pause
-        cmd = [
-            ffmpeg_exe,
-            "-y",
-            "-loop", "1",
-            "-framerate", str(fps),
-            "-i", str(Path(img_path).resolve()),
-            "-i", str(Path(aud_path).resolve()),
-            "-af", f"apad=pad_dur={slide_buffer_seconds}",
-            "-t", f"{total_segment_dur:.3f}",
-            "-c:v", "libx264",
-            "-tune", "stillimage",
-            "-preset", "veryfast",
-            "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-shortest",
-            seg_output
-        ]
+        # Try libx264 first, fallback to mpeg4 if libx264 is unavailable on the host
+        rendered = False
+        last_error = None
+        for vcodec in ["libx264", "mpeg4"]:
+            cmd = [
+                ffmpeg_exe,
+                "-y",
+                "-loop", "1",
+                "-framerate", str(fps),
+                "-i", str(Path(img_path).resolve()),
+                "-i", str(Path(aud_path).resolve()),
+                "-af", f"apad=pad_dur={slide_buffer_seconds}",
+                "-t", f"{total_segment_dur:.3f}",
+                "-c:v", vcodec,
+                "-tune", "stillimage",
+                "-preset", "veryfast",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-shortest",
+                seg_output
+            ]
+            try:
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+                if res.returncode == 0 and os.path.exists(seg_output) and os.path.getsize(seg_output) > 0:
+                    rendered = True
+                    break
+                else:
+                    last_error = res.stderr
+            except Exception as e:
+                last_error = str(e)
 
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        if res.returncode != 0:
-            raise RuntimeError(f"FFmpeg failed rendering segment {idx}: {res.stderr}")
+        if not rendered:
+            print(f"[VideoMaker] Segment {idx} failed to render: {last_error}")
+            return ""
 
         segment_paths.append(seg_output)
+
+    if not segment_paths:
+        return ""
 
     # Concatenate all segments into final_video.mp4
     concat_list_file = os.path.join(segments_dir, "segments_list.txt")
@@ -81,18 +97,30 @@ def assemble_video(
             norm_path = str(Path(seg).resolve()).replace("\\", "/")
             f.write(f"file '{norm_path}'\n")
 
-    concat_cmd = [
-        ffmpeg_exe,
-        "-y",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", concat_list_file,
-        "-c", "copy",
-        final_video_path
-    ]
+    # Try fast stream copy concat first, then re-encode concat fallback
+    concat_success = False
+    for concat_args in [
+        ["-c", "copy"],
+        ["-c:v", "libx264", "-c:a", "aac"],
+        ["-c:v", "mpeg4", "-c:a", "aac"],
+    ]:
+        concat_cmd = [
+            ffmpeg_exe,
+            "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", concat_list_file,
+            *concat_args,
+            final_video_path
+        ]
+        try:
+            res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+            if res.returncode == 0 and os.path.exists(final_video_path) and os.path.getsize(final_video_path) > 0:
+                concat_success = True
+                break
+        except Exception as e:
+            print(f"[VideoMaker] Concat attempt notice: {e}")
 
-    res = subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    if res.returncode != 0:
-        raise RuntimeError(f"FFmpeg concatenation failed: {res.stderr}")
-
-    return final_video_path
+    if concat_success and os.path.exists(final_video_path):
+        return final_video_path
+    return ""

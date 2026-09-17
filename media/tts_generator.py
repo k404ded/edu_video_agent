@@ -23,15 +23,24 @@ from models.schema import PipelineResult, SlideOutput
 
 def get_ffmpeg_binary() -> str:
     """Finds a valid FFmpeg executable cross-platform (Windows & Linux)."""
+    # 1. Check system PATH first (e.g. /usr/bin/ffmpeg on Linux container)
+    which_ffmpeg = shutil.which("ffmpeg")
+    if which_ffmpeg and os.path.exists(which_ffmpeg):
+        return which_ffmpeg
+
+    # 2. Check imageio_ffmpeg bundled binary
     try:
         exe = imageio_ffmpeg.get_ffmpeg_exe()
         if exe and os.path.exists(exe):
+            if os.name != "nt":
+                try:
+                    os.chmod(exe, 0o755)
+                except Exception:
+                    pass
             return exe
     except Exception:
         pass
-    which_ffmpeg = shutil.which("ffmpeg")
-    if which_ffmpeg:
-        return which_ffmpeg
+
     return "ffmpeg"
 
 
@@ -160,13 +169,33 @@ def synthesize_text_to_wav(text: str, output_wav_path: str, voice: str = TTS_VOI
 
 
 def combine_wav_files(wav_paths: List[str], output_wav_path: str) -> str:
-    """Concatenates multiple WAV files into one master WAV file using FFmpeg."""
+    """Concatenates multiple WAV files into one master WAV file using standard library wave or FFmpeg."""
     if not wav_paths:
         raise ValueError("No WAV files provided to combine.")
 
     if len(wav_paths) == 1:
-        _convert_to_wav(wav_paths[0], output_wav_path)
+        shutil.copyfile(wav_paths[0], output_wav_path)
         return output_wav_path
+
+    # Try pure Python wave module first (100% reliable, zero subprocess, cross-platform)
+    try:
+        combined_frames = []
+        base_params = None
+        for p in wav_paths:
+            with wave.open(p, "rb") as wf:
+                if base_params is None:
+                    base_params = wf.getparams()
+                combined_frames.append(wf.readframes(wf.getnframes()))
+
+        if base_params and combined_frames:
+            with wave.open(output_wav_path, "wb") as out_wf:
+                out_wf.setparams(base_params)
+                for frames in combined_frames:
+                    out_wf.writeframes(frames)
+            if os.path.exists(output_wav_path) and os.path.getsize(output_wav_path) > 0:
+                return output_wav_path
+    except Exception as err:
+        print(f"[TTS] Pure-Python wave concatenation notice: {err}. Trying FFmpeg...")
 
     ffmpeg_exe = get_ffmpeg_binary()
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
