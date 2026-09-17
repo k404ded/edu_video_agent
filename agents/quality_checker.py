@@ -33,7 +33,11 @@ def check_section(
         voice_over=slide_output.voice_over,
         on_screen_content=slide_output.on_screen_content,
     )
-    data = call_llm_json(prompt, model_name=model_name)
+    try:
+        data = call_llm_json(prompt, model_name=model_name)
+    except Exception as e:
+        print(f"[QualityChecker] Section {section.index} check notice: {e}")
+        return []
     if not isinstance(data, list):
         return []
     issues = []

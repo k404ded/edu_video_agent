@@ -102,10 +102,18 @@ def run_pipeline(
         if slide_images and result.section_audio_paths:
             try:
                 report("Assembling final educational video with narration (final_video.mp4)...")
-                video_path = assemble_video(slide_images, result.section_audio_paths, output_dir=out_dir)
+                video_path = assemble_video(
+                    slide_images,
+                    result.section_audio_paths,
+                    output_dir=out_dir,
+                    master_audio_path=result.audio_path or "",
+                )
                 if video_path and os.path.exists(video_path):
                     result.video_path = video_path
+                else:
+                    result.video_error = "Video encoder finished without generating an MP4 output."
             except Exception as e:
+                result.video_error = str(e)
                 print(f"[Orchestrator] Video assembly notice: {e}")
 
     total_time = time.time() - t0

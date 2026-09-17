@@ -74,6 +74,7 @@ class PipelineResult:
     video_path: Optional[str] = None
     slide_image_paths: List[str] = field(default_factory=list)
     section_audio_paths: List[str] = field(default_factory=list)
+    video_error: Optional[str] = None
 
     def to_dict(self):
         return {
@@ -85,6 +86,7 @@ class PipelineResult:
             "pptx_path": self.pptx_path,
             "audio_path": self.audio_path,
             "video_path": self.video_path,
+            "video_error": self.video_error,
             "slide_image_paths": list(self.slide_image_paths),
             "section_audio_paths": list(self.section_audio_paths),
         }

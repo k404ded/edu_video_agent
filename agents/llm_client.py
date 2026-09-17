@@ -18,13 +18,11 @@ _client = None
 _exhausted_models = set()
 
 # High-speed fallback models with separate quota pools on Gemini API
-# Fast-lite models are prioritized first for sub-second responses
 FALLBACK_MODELS = [
     "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
     "gemini-3.1-flash-lite",
-    "gemini-flash-lite-latest",
-    "gemini-3.8-flash",
-    "gemini-3.7-flash",
+    "gemini-flash-latest",
 ]
 
 
@@ -84,8 +82,8 @@ def get_client():
 def _call_with_model_fallback(
     make_call_fn,
     preferred_model: Optional[str] = None,
-    max_retries_per_model: int = 2,
-    initial_delay: float = 1.0,
+    max_retries_per_model: int = 3,
+    initial_delay: float = 1.5,
 ):
     """
     Executes an API call across model candidates, automatically failing over to
@@ -113,7 +111,7 @@ def _call_with_model_fallback(
                         break
 
                     retry_sec = _extract_retry_delay(e)
-                    if retry_sec and retry_sec <= 5 and attempt < max_retries_per_model - 1:
+                    if retry_sec and retry_sec <= 6 and attempt < max_retries_per_model - 1:
                         time.sleep(retry_sec)
                         continue
                     elif attempt < max_retries_per_model - 1:
@@ -127,9 +125,10 @@ def _call_with_model_fallback(
                 # 503: High demand spike -> temporary burst limit; wait briefly and retry
                 elif status_code == 503:
                     if attempt < max_retries_per_model - 1:
-                        time.sleep(1.5 * (attempt + 1))
+                        time.sleep(2.0 * (attempt + 1))
                         continue
                     else:
+                        # Try next model candidate
                         break
 
                 # 404: Model not found or deprecated -> mark exhausted
@@ -138,11 +137,14 @@ def _call_with_model_fallback(
                     break
 
                 else:
-                    # Non-transient error (e.g. 400 Bad Request)
-                    raise
+                    if attempt < max_retries_per_model - 1:
+                        time.sleep(1.0)
+                        continue
+                    break
             except Exception as e:
                 last_error = e
-                raise
+                # Transient network error; try next candidate
+                break
 
     if last_error:
         if getattr(last_error, "code", None) == 429 and _is_daily_quota_error(last_error):

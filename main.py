@@ -6,6 +6,8 @@ Run with: streamlit run main.py
 import os
 import sys
 import tempfile
+import base64
+import json
 from pathlib import Path
 
 # Ensure edu_video_agent directory is in sys.path and is the working directory
@@ -15,6 +17,7 @@ if str(_CURRENT_DIR) not in sys.path:
 os.chdir(_CURRENT_DIR)
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from config import get_api_key, SUPPORTED_EXTENSIONS, MODEL_NAME
 from agents.orchestrator import run_pipeline
@@ -30,10 +33,10 @@ st.set_page_config(
 # Sidebar configuration
 # --------------------------------------------------------------------
 AVAILABLE_MODELS = {
-    "gemini-3.5-flash-lite": "⚡ Gemini 3.5 Flash Lite (Sub-second, Recommended)",
-    "gemini-3.1-flash-lite": "⚡ Gemini 3.1 Flash Lite (Fast)",
-    "gemini-3.8-flash": "Gemini 3.8 Flash (Standard)",
-    "gemini-3.7-flash": "Gemini 3.7 Flash (Reasoning)",
+    "gemini-3.5-flash-lite": "⚡ Gemini 3.5 Flash Lite (Fast & Sub-second, Recommended)",
+    "gemini-3.6-flash": "🚀 Gemini 3.6 Flash (High Quality)",
+    "gemini-3.1-flash-lite": "⚡ Gemini 3.1 Flash Lite (Preview)",
+    "gemini-flash-latest": "🌐 Gemini Flash Latest",
 }
 
 with st.sidebar:
@@ -91,7 +94,11 @@ with st.container(border=True):
         )
     with col2:
         st.markdown("**Supported input:** `.pptx`, `.pdf`, or pasted text below")
-        generate_media = st.checkbox("Generate complete media outputs (PPTX + WAV + MP4)", value=True)
+        generate_media = st.checkbox(
+            "🎬 Generate complete media outputs (PPTX + WAV + Video)",
+            value=True,
+            help="Creates synchronized slide visual frames, natural AI voice-over audio narration, and a full widescreen PowerPoint deck.",
+        )
 
     pasted_text = st.text_area(
         "...or paste educational content directly (optional if a file is uploaded)",
@@ -99,7 +106,8 @@ with st.container(border=True):
         placeholder="Paste slide/section text here. Example:\n\nIntroduction to Electric Vehicles\nElectric vehicles use electric motors instead of conventional internal combustion engines...",
     )
 
-    generate_clicked = st.button("🚀 Generate Presentation, Audio & Video", type="primary", use_container_width=False)
+    btn_label = "🚀 Generate Presentation, Audio & Video" if generate_media else "📝 Generate Text Breakdown Only"
+    generate_clicked = st.button(btn_label, type="primary", use_container_width=True)
 
 # --------------------------------------------------------------------
 # Pipeline execution
@@ -137,6 +145,146 @@ if generate_clicked:
             status_box.update(label="Generation failed.", state="error", expanded=True)
             st.error(f"Pipeline error: {e}")
 
+def render_interactive_video_player(result):
+    """Renders a responsive, client-side synchronized presentation video player in HTML5."""
+    from media.tts_generator import get_audio_duration_seconds
+
+    if not result.audio_path or not os.path.exists(result.audio_path):
+        st.info("Audio narration track not available.")
+        return
+
+    try:
+        with open(result.audio_path, "rb") as af:
+            audio_b64 = base64.b64encode(af.read()).decode("utf-8")
+
+        slide_data = []
+        curr_time = 0.0
+        for idx, s_path in enumerate(result.slide_image_paths):
+            if not os.path.exists(s_path):
+                continue
+            with open(s_path, "rb") as sf:
+                s_b64 = base64.b64encode(sf.read()).decode("utf-8")
+
+            dur = 3.5
+            if result.section_audio_paths and idx < len(result.section_audio_paths):
+                dur = max(get_audio_duration_seconds(result.section_audio_paths[idx]) + 0.5, 1.5)
+
+            slide_data.append({
+                "index": idx + 1,
+                "start": round(curr_time, 2),
+                "end": round(curr_time + dur, 2),
+                "src": f"data:image/png;base64,{s_b64}",
+            })
+            curr_time += dur
+
+        if not slide_data:
+            st.info("Slide visual frames not available.")
+            return
+
+        slides_json = json.dumps(slide_data)
+        total_sec = max(round(curr_time, 1), 1.0)
+        total_min = int(total_sec // 60)
+        total_rem_sec = int(total_sec % 60)
+
+        player_html = f"""
+        <div style="width:100%; font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif; background:#0f172a; border-radius:12px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.25); color:#fff;">
+          <div style="position:relative; width:100%; padding-top:56.25%; background:#020617;">
+            <img id="active-slide" src="{slide_data[0]['src']}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain;" />
+            <div id="slide-badge" style="position:absolute; top:12px; right:12px; background:rgba(15,23,42,0.85); backdrop-filter:blur(6px); padding:4px 12px; border-radius:6px; font-size:12px; font-weight:600; color:#38bdf8; border:1px solid rgba(56,189,248,0.3);">Slide 1 / {len(slide_data)}</div>
+          </div>
+          <div style="padding:10px 14px; background:#1e293b; display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <button id="play-btn" onclick="togglePlay()" style="background:#2563eb; border:none; color:white; width:36px; height:36px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px;">▶</button>
+              <button onclick="prevSlide()" style="background:#334155; border:none; color:white; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px;">⏮ Prev</button>
+              <button onclick="nextSlide()" style="background:#334155; border:none; color:white; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px;">Next ⏭</button>
+              <input type="range" id="seek-bar" value="0" min="0" max="{total_sec}" step="0.1" oninput="seekAudio(this.value)" style="flex:1; cursor:pointer; accent-color:#38bdf8;" />
+              <span id="time-display" style="font-size:12px; color:#94a3b8; font-variant-numeric:tabular-nums; min-width:80px; text-align:right;">00:00 / {total_min:02d}:{total_rem_sec:02d}</span>
+            </div>
+            <audio id="player-audio" src="data:audio/wav;base64,{audio_b64}" preload="auto"></audio>
+          </div>
+        </div>
+        <script>
+          const slides = {slides_json};
+          const audio = document.getElementById('player-audio');
+          const slideImg = document.getElementById('active-slide');
+          const badge = document.getElementById('slide-badge');
+          const playBtn = document.getElementById('play-btn');
+          const seekBar = document.getElementById('seek-bar');
+          const timeDisp = document.getElementById('time-display');
+
+          function fmtTime(sec) {{
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
+            return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+          }}
+
+          function updateSlide(t) {{
+            for (let i = 0; i < slides.length; i++) {{
+              if (t >= slides[i].start && (t < slides[i].end || i === slides.length - 1)) {{
+                if (slideImg.src !== slides[i].src) {{
+                  slideImg.src = slides[i].src;
+                  badge.innerText = 'Slide ' + slides[i].index + ' / ' + slides.length;
+                }}
+                break;
+              }}
+            }}
+          }}
+
+          audio.ontimeupdate = function() {{
+            seekBar.value = audio.currentTime;
+            timeDisp.innerText = fmtTime(audio.currentTime) + ' / ' + fmtTime(audio.duration || {total_sec});
+            updateSlide(audio.currentTime);
+          }};
+
+          audio.onended = function() {{
+            playBtn.innerText = '▶';
+          }};
+
+          function togglePlay() {{
+            if (audio.paused) {{
+              audio.play();
+              playBtn.innerText = '⏸';
+            }} else {{
+              audio.pause();
+              playBtn.innerText = '▶';
+            }}
+          }}
+
+          function seekAudio(val) {{
+            audio.currentTime = parseFloat(val);
+            updateSlide(audio.currentTime);
+          }}
+
+          function prevSlide() {{
+            const t = audio.currentTime;
+            for (let i = slides.length - 1; i >= 0; i--) {{
+              if (slides[i].start < t - 0.5) {{
+                audio.currentTime = slides[i].start;
+                updateSlide(slides[i].start);
+                return;
+              }}
+            }}
+            audio.currentTime = 0;
+            updateSlide(0);
+          }}
+
+          function nextSlide() {{
+            const t = audio.currentTime;
+            for (let i = 0; i < slides.length; i++) {{
+              if (slides[i].start > t + 0.1) {{
+                audio.currentTime = slides[i].start;
+                updateSlide(slides[i].start);
+                return;
+              }}
+            }}
+          }}
+        </script>
+        """
+        components.html(player_html, height=480)
+    except Exception as e:
+        st.warning(f"Interactive player notice: {e}")
+
+
 # --------------------------------------------------------------------
 # Output area
 # --------------------------------------------------------------------
@@ -157,13 +305,13 @@ if result:
     # ================================================================
     # THREE FINAL MEDIA OUTPUTS SHOWCASE
     # ================================================================
-    if result.video_path or result.audio_path or result.pptx_path:
+    if result.video_path or result.audio_path or result.pptx_path or result.slide_image_paths:
         st.markdown("### 🎥 Final Media Outputs")
         media_col1, media_col2 = st.columns([3, 2])
 
         with media_col1:
-            st.markdown("#### 🎬 Final Educational Video (.mp4)")
-            if result.video_path and os.path.exists(result.video_path):
+            st.markdown("#### 🎬 Final Educational Video")
+            if result.video_path and os.path.exists(result.video_path) and os.path.getsize(result.video_path) > 1000:
                 with open(result.video_path, "rb") as vf:
                     video_bytes = vf.read()
                 st.video(video_bytes, format="video/mp4")
@@ -175,6 +323,13 @@ if result:
                     type="primary",
                     use_container_width=True,
                 )
+            elif result.slide_image_paths and result.audio_path:
+                render_interactive_video_player(result)
+                st.caption("📺 Playing in Synchronized HD Educational Presentation Mode.")
+                if getattr(result, "video_error", None):
+                    with st.expander("ℹ️ Direct MP4 File Download Note", expanded=False):
+                        st.caption(f"Server encoder notice: {result.video_error}")
+                        st.info("Tip for Streamlit Cloud: To enable standalone .mp4 download export, click '⋮' in the top right of your Streamlit Cloud app dashboard and select 'Rebuild with clear cache' so Debian installs FFmpeg from packages.txt.")
             else:
                 st.info("Video was not generated or media toggle was off.")
 
