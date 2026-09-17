@@ -94,11 +94,7 @@ with st.container(border=True):
         )
     with col2:
         st.markdown("**Supported input:** `.pptx`, `.pdf`, or pasted text below")
-        generate_media = st.checkbox(
-            "🎬 Generate complete media outputs (PPTX + WAV + Video)",
-            value=True,
-            help="Creates synchronized slide visual frames, natural AI voice-over audio narration, and a full widescreen PowerPoint deck.",
-        )
+        st.success("🎬 **Full Media Package:** Generates an HD Synchronized Video, AI Voice Narration (.wav), and an editable 16:9 PowerPoint (.pptx).")
 
     pasted_text = st.text_area(
         "...or paste educational content directly (optional if a file is uploaded)",
@@ -106,8 +102,7 @@ with st.container(border=True):
         placeholder="Paste slide/section text here. Example:\n\nIntroduction to Electric Vehicles\nElectric vehicles use electric motors instead of conventional internal combustion engines...",
     )
 
-    btn_label = "🚀 Generate Presentation, Audio & Video" if generate_media else "📝 Generate Text Breakdown Only"
-    generate_clicked = st.button(btn_label, type="primary", use_container_width=True)
+    generate_clicked = st.button("🚀 Generate Presentation, Audio & Video", type="primary", use_container_width=True)
 
 # --------------------------------------------------------------------
 # Pipeline execution
@@ -135,7 +130,7 @@ if generate_clicked:
                 file_path=file_path,
                 pasted_text=pasted_text if not uploaded_file else None,
                 progress_callback=progress_callback,
-                generate_media=generate_media,
+                generate_media=True,
                 model_name=selected_model,
             )
             st.session_state.result = result
@@ -305,33 +300,32 @@ if result:
     # ================================================================
     # THREE FINAL MEDIA OUTPUTS SHOWCASE
     # ================================================================
-    if result.video_path or result.audio_path or result.pptx_path or result.slide_image_paths:
-        st.markdown("### 🎥 Final Media Outputs")
-        media_col1, media_col2 = st.columns([3, 2])
+    st.markdown("### 🎥 Final Media Outputs")
+    media_col1, media_col2 = st.columns([3, 2])
 
-        with media_col1:
-            st.markdown("#### 🎬 Final Educational Video")
-            if result.video_path and os.path.exists(result.video_path) and os.path.getsize(result.video_path) > 1000:
-                with open(result.video_path, "rb") as vf:
-                    video_bytes = vf.read()
-                st.video(video_bytes, format="video/mp4")
-                st.download_button(
-                    "⬇️ Download final_video.mp4",
-                    data=video_bytes,
-                    file_name="final_video.mp4",
-                    mime="video/mp4",
-                    type="primary",
-                    use_container_width=True,
-                )
-            elif result.slide_image_paths and result.audio_path:
-                render_interactive_video_player(result)
-                st.caption("📺 Playing in Synchronized HD Educational Presentation Mode.")
-                if getattr(result, "video_error", None):
-                    with st.expander("ℹ️ Direct MP4 File Download Note", expanded=False):
-                        st.caption(f"Server encoder notice: {result.video_error}")
-                        st.info("Tip for Streamlit Cloud: To enable standalone .mp4 download export, click '⋮' in the top right of your Streamlit Cloud app dashboard and select 'Rebuild with clear cache' so Debian installs FFmpeg from packages.txt.")
-            else:
-                st.info("Video was not generated or media toggle was off.")
+    with media_col1:
+        st.markdown("#### 🎬 Final Educational Video")
+        if result.video_path and os.path.exists(result.video_path) and os.path.getsize(result.video_path) > 1000:
+            with open(result.video_path, "rb") as vf:
+                video_bytes = vf.read()
+            st.video(video_bytes, format="video/mp4")
+            st.download_button(
+                "⬇️ Download final_video.mp4",
+                data=video_bytes,
+                file_name="final_video.mp4",
+                mime="video/mp4",
+                type="primary",
+                use_container_width=True,
+            )
+        elif result.slide_image_paths and result.audio_path:
+            render_interactive_video_player(result)
+            st.caption("📺 Playing in Synchronized HD Educational Presentation Mode.")
+            if getattr(result, "video_error", None):
+                with st.expander("ℹ️ Direct MP4 File Download Note", expanded=False):
+                    st.caption(f"Server encoder notice: {result.video_error}")
+                    st.info("Tip for Streamlit Cloud: To enable standalone .mp4 download export, click '⋮' in the top right of your Streamlit Cloud app dashboard and select 'Rebuild with clear cache' so Debian installs FFmpeg from packages.txt.")
+        else:
+            st.info("Video media is currently being prepared.")
 
         with media_col2:
             st.markdown("#### 🎙️ Spoken AI Voice-Over (.wav)")
