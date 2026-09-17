@@ -13,7 +13,7 @@ from typing import List
 import imageio_ffmpeg
 
 from config import VIDEO_FPS
-from media.tts_generator import get_audio_duration_seconds
+from media.tts_generator import get_audio_duration_seconds, get_ffmpeg_binary
 
 
 def assemble_video(
@@ -38,7 +38,7 @@ def assemble_video(
     segments_dir = os.path.join(media_dir, "segments")
     os.makedirs(segments_dir, exist_ok=True)
 
-    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg_exe = get_ffmpeg_binary()
     final_video_path = os.path.join(media_dir, "final_video.mp4")
 
     segment_paths: List[str] = []

@@ -36,7 +36,7 @@ def _get_secret(key: str, default: str = "") -> str:
 GEMINI_API_KEY = get_api_key()
 MODEL_NAME = _get_secret("MODEL_NAME", "gemini-3.5-flash-lite")
 MAX_TOKENS_PER_CALL = int(os.getenv("MAX_TOKENS_PER_CALL", "4096"))
-CONCURRENT_WORKERS = int(os.getenv("CONCURRENT_WORKERS", "6"))
+CONCURRENT_WORKERS = int(os.getenv("CONCURRENT_WORKERS", "2"))
 
 # --- Pipeline configuration ---------------------------------------------
 # Words-per-minute assumption used to estimate voice-over duration.

@@ -22,6 +22,7 @@ _exhausted_models = set()
 FALLBACK_MODELS = [
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
+    "gemini-flash-lite-latest",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
 ]
@@ -123,10 +124,13 @@ def _call_with_model_fallback(
                         _exhausted_models.add(model)
                         break
 
-                # 503: High demand spike -> immediately mark exhausted to protect pipeline speed
+                # 503: High demand spike -> temporary burst limit; wait briefly and retry
                 elif status_code == 503:
-                    _exhausted_models.add(model)
-                    break
+                    if attempt < max_retries_per_model - 1:
+                        time.sleep(1.5 * (attempt + 1))
+                        continue
+                    else:
+                        break
 
                 # 404: Model not found or deprecated -> mark exhausted
                 elif status_code == 404:
